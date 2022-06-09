@@ -100,6 +100,15 @@ def sample_deck_for_n_notes(deck: List[Note], request_n_samples: int):
         console.print(Padding(md, (1, 2, 2, 2)))
 
 
+def filter_with_keyword(deck: List[Note], keyword: str) -> List[Note]:
+    keyword_normalized = keyword.lower()
+
+    def answer_contains_keyword(note: Note):
+        return keyword_normalized in note.answer().lower()
+
+    return [*filter(answer_contains_keyword, deck)]
+
+
 def main():
     import argparse
 
@@ -108,6 +117,7 @@ def main():
     parser.add_argument("--samples", type=int, default=10)
     parser.add_argument("--sample-all", action="store_true", default=False)
     parser.add_argument("--verbose", action="store_true", default=False)
+    parser.add_argument("-k", "--keyword", nargs="?", default=None)
 
     args = parser.parse_args()
 
@@ -115,6 +125,9 @@ def main():
 
     if args.verbose:
         logging.getLogger().setLevel(logging.INFO)
+
+    if args.keyword is not None:
+        deck = filter_with_keyword(deck, args.keyword)
 
     if args.sample_all:
         sample_deck_for_every_note(deck)

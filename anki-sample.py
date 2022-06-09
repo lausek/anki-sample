@@ -42,7 +42,7 @@ class Note:
 
 def load_deck_from_path(path: str) -> List[Note]:
     db = load_db_from_anki_file(path)
-    return load_deck_from_deck(db)
+    return load_deck_from_db(db)
 
 
 def load_db_from_anki_file(deck_path: str) -> sqlite3.Connection:
@@ -60,9 +60,11 @@ def load_db_from_anki_file(deck_path: str) -> sqlite3.Connection:
         return sqlite3.connect(extracted_deck_path / "collection.anki2")
 
 
-def load_deck_from_deck(db: sqlite3.Connection) -> List[Note]:
+def load_deck_from_db(db: sqlite3.Connection) -> List[Note]:
     questions_raw = db.execute("select * from notes").fetchall()
-    return [*filter(bool, map(Note.from_row, questions_raw))]
+    deck = [*filter(bool, map(Note.from_row, questions_raw))]
+    logging.info(f"loaded {len(deck)} notes.")
+    return deck
 
 
 def rich_format_answer_md(answer: str) -> str:
@@ -85,7 +87,6 @@ def sample_deck_for_n_notes(deck: List[Note], request_n_samples: int):
     console = Console()
     possible_samples_n = min(request_n_samples, len(deck))
 
-    logging.info(f"loaded {len(deck)} notes.")
     logging.info(f"sampling {possible_samples_n} notes from deck.")
 
     for note in random.sample(deck, k=possible_samples_n):
@@ -106,7 +107,13 @@ def filter_with_keyword(deck: List[Note], keyword: str) -> List[Note]:
     def answer_contains_keyword(note: Note):
         return keyword_normalized in note.answer().lower()
 
-    return [*filter(answer_contains_keyword, deck)]
+    filtered_deck = [*filter(answer_contains_keyword, deck)]
+
+    logging.info(
+        f"filtering deck for keyword '{keyword}' resulted in {len(filtered_deck)} notes."
+    )
+
+    return filtered_deck
 
 
 def main():
@@ -121,10 +128,10 @@ def main():
 
     args = parser.parse_args()
 
-    deck = load_deck_from_path(args.DECK_PATH)
-
     if args.verbose:
         logging.getLogger().setLevel(logging.INFO)
+
+    deck = load_deck_from_path(args.DECK_PATH)
 
     if args.keyword is not None:
         deck = filter_with_keyword(deck, args.keyword)
@@ -138,6 +145,8 @@ def main():
 if __name__ == "__main__":
     from rich.logging import RichHandler
 
-    logging.basicConfig(handlers=[RichHandler()])
+    logging.basicConfig(
+        format="%(message)s", datefmt="[%X]", handlers=[RichHandler(show_path=False)]
+    )
 
     main()

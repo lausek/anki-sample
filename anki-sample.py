@@ -40,12 +40,17 @@ class Note:
             return None
 
 
-def load_db_from_deck(deck_path: Path) -> sqlite3.Connection:
+def load_deck_from_path(path: str) -> List[Note]:
+    db = load_db_from_anki_file(path)
+    return load_deck_from_deck(db)
+
+
+def load_db_from_anki_file(deck_path: str) -> sqlite3.Connection:
     from hashlib import md5
     import tempfile
     import zipfile
 
-    deck_digest = md5(str(deck_path).encode("utf-8")).hexdigest()
+    deck_digest = md5(deck_path.encode("utf-8")).hexdigest()
     extracted_deck_name = f"anki-sample-{deck_digest}"
     extracted_deck_path = Path(tempfile.gettempdir()) / extracted_deck_name
 
@@ -55,7 +60,7 @@ def load_db_from_deck(deck_path: Path) -> sqlite3.Connection:
         return sqlite3.connect(extracted_deck_path / "collection.anki2")
 
 
-def load_questions(db) -> List[Note]:
+def load_deck_from_deck(db: sqlite3.Connection) -> List[Note]:
     questions_raw = db.execute("select * from notes").fetchall()
     return [*filter(bool, map(Note.from_row, questions_raw))]
 
@@ -66,7 +71,11 @@ def rich_format_answer_md(answer: str) -> str:
     return markdownify(answer)
 
 
-def sample_deck_for_n_notes(deck_path: Path, request_n_samples: int):
+def sample_deck_for_every_note(deck: List[Note]):
+    return sample_deck_for_n_notes(deck, len(deck))
+
+
+def sample_deck_for_n_notes(deck: List[Note], request_n_samples: int):
     import random
 
     from rich.console import Console
@@ -74,15 +83,12 @@ def sample_deck_for_n_notes(deck_path: Path, request_n_samples: int):
     from rich.padding import Padding
 
     console = Console()
+    possible_samples_n = min(request_n_samples, len(deck))
 
-    db = load_db_from_deck(deck_path)
-    notes = load_questions(db)
+    logging.info(f"loaded {len(deck)} notes.")
+    logging.info(f"sampling {possible_samples_n} notes from deck.")
 
-    logging.info(f"loaded {len(notes)} notes.")
-
-    possible_samples_n = min(request_n_samples, len(notes))
-
-    for note in random.sample(notes, k=possible_samples_n):
+    for note in random.sample(deck, k=possible_samples_n):
         question, answer = note.question(), note.answer()
 
         console.print(f"[bold]Question: {question}[/]")
@@ -100,10 +106,20 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("DECK_PATH", type=str)
     parser.add_argument("--samples", type=int, default=10)
+    parser.add_argument("--sample-all", action="store_true", default=False)
+    parser.add_argument("--verbose", action="store_true", default=False)
 
     args = parser.parse_args()
 
-    sample_deck_for_n_notes(Path(args.DECK_PATH), args.samples)
+    deck = load_deck_from_path(args.DECK_PATH)
+
+    if args.verbose:
+        logging.getLogger().setLevel(logging.INFO)
+
+    if args.sample_all:
+        sample_deck_for_every_note(deck)
+    else:
+        sample_deck_for_n_notes(deck, args.samples)
 
 
 if __name__ == "__main__":
